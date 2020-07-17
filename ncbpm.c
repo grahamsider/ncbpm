@@ -16,22 +16,16 @@ static bool sw_dtct;
 
 void loop (void)
 {
-    int x_max = COLS - 1;
-    int y_max = LINES - 1;
-    int x_cntr = x_max / 2;
-    int y_cntr = y_max / 2;
+    struct timeval t_now;
+    struct timestore t_store = {0, 0, 0, 0};
+    struct termstore term_xy = { COLS - 1, LINES - 1, (COLS - 1) / 2, (LINES - 1) / 2 };
 
     int i = 0;
     int ch;
 
-    long unsigned t0_sec = 0;
-    long unsigned t0_usec = 0;
-    long unsigned t_prev_sec = 0;
-    long unsigned t_prev_usec = 0;
-    struct timeval t_now;
-
-    print_bpm_unkwn(i, x_cntr, y_cntr);
-    print_help(y_max);
+    // TUI Init
+    print_bpm_unkwn(i, term_xy.x_cntr, term_xy.y_cntr);
+    print_help(term_xy.y_max);
 
     while (1) 
     {
@@ -40,55 +34,55 @@ void loop (void)
 
         // Check sigwinch
         if (sw_dtct)
-            reload_sigwinch (&x_max, &y_max, &x_cntr, &y_cntr);
+            reload_sigwinch (&term_xy);
 
         // Check quit and keyboard reset
         if (ch == 'q' || ch == 'Q') break;
         if (ch == 'r' || ch == 'R')
         {
             i = 0;
-            print_bpm_unkwn(i, x_cntr, y_cntr);
+            print_bpm_unkwn(i, term_xy.x_cntr, term_xy.y_cntr);
         }
 
         // First beat
         else if (!i)
-            beat_init(&t0_sec, &t0_usec, &t_prev_sec, &t_prev_usec, &t_now, &i, x_cntr, y_cntr);
+            beat_init(&t_store, &t_now, &term_xy, &i);
 
         // Check timeout reset
-        else if (timeout_rst(t_prev_sec, t_prev_usec, &t_now))
+        else if (timeout_rst(t_store.t_prev_sec, t_store.t_prev_usec, &t_now))
         {
             i = 0;
-            beat_init(&t0_sec, &t0_usec, &t_prev_sec, &t_prev_usec, &t_now, &i, x_cntr, y_cntr);
+            beat_init(&t_store, &t_now, &term_xy, &i);
         }
 
         // Update
         else
-            beat_update(t0_sec, t0_usec, &t_prev_sec, &t_prev_usec, &t_now, &i, x_cntr, y_cntr);
+            beat_update(&t_store, &t_now, &term_xy, &i);
+        
     }
 }
 
-void beat_init (long unsigned *t0_sec, long unsigned *t0_usec,
-                long unsigned *t_prev_sec, long unsigned *t_prev_usec,
-                const struct timeval *t_now, int *count, const int x, const int y)
+void beat_init (struct timestore *t_store, const struct timeval *t_now,
+                const struct termstore *term_xy, int *count)
 {
-    store_time(t0_sec, t0_usec, t_now);
-    store_time(t_prev_sec, t_prev_usec, t_now);
-    print_bpm_unkwn(++(*count), x, y);
+    store_time(&(t_store->t0_sec), &(t_store->t0_usec), t_now);
+    store_time(&(t_store->t_prev_sec), &(t_store->t_prev_usec), t_now);
+    print_bpm_unkwn(++(*count), term_xy->x_cntr, term_xy->y_cntr);
 }
 
-void beat_update (long unsigned t0_sec, long unsigned t0_usec,
-                  long unsigned *t_prev_sec, long unsigned *t_prev_usec,
-                  const struct timeval *t_now, int *count, const int x, const int y)
+void beat_update (struct timestore *t_store, const struct timeval *t_now,
+                  const struct termstore *term_xy, int *count)
 {
-    unsigned t_elapsed_usec_total = (((t_now->tv_sec - t0_sec) * USEC_CONV) + (t_now->tv_usec - t0_usec));
+    unsigned t_elapsed_usec_total = (((t_now->tv_sec - t_store->t0_sec) * USEC_CONV) \
+                                    + (t_now->tv_usec - t_store->t0_usec));
     double t_elapsed_min_total = ((double) t_elapsed_usec_total / USEC_CONV) / MIN_CONV;
     double bpmf = (double) (*count) / t_elapsed_min_total;
     unsigned bpmi = (int) (bpmf + 0.5);
 
-    print_bpm(bpmf, bpmi, *count, x, y);
+    print_bpm(bpmf, bpmi, *count, term_xy->x_cntr, term_xy->y_cntr);
     refresh();
 
-    store_time(t_prev_sec, t_prev_usec, t_now);
+    store_time(&(t_store->t_prev_sec), &(t_store->t_prev_usec), t_now);
     ++(*count);
 }
 
@@ -149,18 +143,18 @@ void mvclrln (const int y)
     clrtoeol();
 }
 
-void reload_sigwinch (int *x_max, int *y_max, int *x_cntr, int *y_cntr)
+void reload_sigwinch (struct termstore *term_xy)
 {
     endwin();
     refresh();
-    clear_bpm(*y_cntr);
-    clear_help(*y_max);
-    getmaxyx(stdscr, *y_max, *x_max);
-    (*y_max)--;
-    (*x_max)--;
-    print_help(*y_max);
-    *x_cntr = *x_max / 2;
-    *y_cntr = *y_max / 2;
+    clear_bpm(term_xy->y_cntr);
+    clear_help(term_xy->y_max);
+    getmaxyx(stdscr, term_xy->y_max, term_xy->x_max);
+    --term_xy->y_max;
+    --term_xy->x_max;
+    print_help(term_xy->y_max);
+    term_xy->x_cntr = term_xy->x_max / 2;
+    term_xy->y_cntr = term_xy->y_max / 2;
     sw_dtct = false;
 }
 
