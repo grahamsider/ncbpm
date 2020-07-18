@@ -1,12 +1,15 @@
 CC=gcc
-CFLAGS=-I. -Wall -lncurses
-DEPS=ncbpm.h
+IDIR=src
 ODIR=obj
-_OBJ=ncbpm.o
+CFLAGS=-I$(IDIR) -Wall -lncurses
+
+_DEPS=ncbpm.h nchelpers.h ncdefines.h nctime.h
+DEPS=$(patsubst %,$(IDIR)/%,$(_DEPS))
+
+_OBJ=ncbpm.o nchelpers.o nctime.o
 OBJ=$(patsubst %,$(ODIR)/%,$(_OBJ))
 
-
-$(ODIR)/%.o: %.c $(DEPS)
+$(ODIR)/%.o: $(IDIR)/%.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 ncbpm: $(OBJ)
